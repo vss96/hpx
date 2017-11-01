@@ -152,29 +152,37 @@ namespace hpx { namespace threads { namespace executors
         Executor     executor_;
         NumaFunction numa_function_;
         //
-        template <typename F, typename P, typename ... Ts>
-        auto operator()(F && f, P && predecessor, Ts &&... ts) const
+
+        template <typename F, template <typename> typename Future, typename P, typename ... Ts>
+        auto
+        operator()(F && f, Future<P> && predecessor, Ts &&... ts)
         {
-            int domain = numa_function_(predecessor, ts...);
+            typedef typename traits::detail::shared_state_ptr_for<Future<P>>::type
+                shared_state_ptr;
+
+            shared_state_ptr const& state =
+                traits::detail::get_shared_state(predecessor);
+
+            P *predecessor_value = state->get_result();
+            int domain = numa_function_(*predecessor_value, ts...);
             std::cout << "The numa domain is " << domain << "\n";
 
             std::cout << "pre_execution_then_domain_schedule" << "\n";
 
             std::cout << "Function : \n\t" << print_type<F>() << "\n";
+            std::cout << "Predecessor : \n\t" << print_type<Future<P>>() << "\n";
             std::cout << "Predecessor : \n\t" << print_type<P>() << "\n";
             std::cout << "Arguments : \n\t" << print_type(ts...) << "\n";
 
-
             // now we must forward the task on to the correct dispatch function
-            typedef typename util::detail::invoke_deferred_result<F, hpx::future<P>, Ts...>::type
-                result_type;
+            typedef typename
+                util::detail::invoke_deferred_result<F, Future<P>, Ts...>::type
+                        result_type;
             std::cout << "Result type : \n\t" << print_type<result_type>() << "\n";
-
-            auto fut = hpx::make_ready_future(std::move(predecessor));
             //
             lcos::local::futures_factory<result_type()> p(
                 const_cast<Executor&>(executor_),
-                util::deferred_call(std::forward<F>(f), std::move(fut), std::forward<Ts>(ts)...));
+            util::deferred_call(std::forward<F>(f), std::move(predecessor), std::forward<Ts>(ts)...));
 
             std::cout << "setting up p \n";
             p.apply(
@@ -291,18 +299,18 @@ std::cout << "async_execute pool_numa_hint<R(*)(Args...)> : R : \n\t" << print_t
         };
 
         ///////////////////////////////////////////////////////////////////////
-        template <typename F, template <typename> typename Future, typename X, typename ... Ts>
+        template <typename F, template <typename> typename Future, typename P, typename ... Ts>
         auto
-        then_execute(F && f, Future<X> & predecessor, Ts &&... ts)
+        then_execute(F && f, Future<P> & predecessor, Ts &&... ts)
         ->  hpx::future<typename hpx::util::detail::invoke_deferred_result<
-            F, Future<X>, Ts...>::type>
+            F, Future<P>, Ts...>::type>
         {
             typedef typename hpx::util::detail::invoke_deferred_result<
-                    F, Future<X>, Ts...>::type result_type;
+                    F, Future<P>, Ts...>::type result_type;
 
             std::cout << "then_execute pool_numa_hint<Args...> : Function : \n\t" << print_type<F>() << "\n";
-            std::cout << "then_execute pool_numa_hint<Args...> : Predecessor : \n\t" << print_type<Future<X>>() << "\n";;
-            std::cout << "then_execute pool_numa_hint<Args...> : Future type : \n\t" << print_type<X>() << "\n";
+            std::cout << "then_execute pool_numa_hint<Args...> : Predecessor : \n\t" << print_type<Future<P>>() << "\n";;
+            std::cout << "then_execute pool_numa_hint<Args...> : Future type : \n\t" << print_type<P>() << "\n";
             std::cout << "then_execute pool_numa_hint<Args...> : Arguments : \n\t" << print_type(ts...) << "\n";
             std::cout << "then_execute pool_numa_hint<Args...> : result_type : \n\t" << print_type<result_type>() << "\n";
             std::cout << "then_execute executor_type : executor_type : \n\t" << print_type<executor_type>() << "\n";
@@ -311,19 +319,20 @@ std::cout << "async_execute pool_numa_hint<R(*)(Args...)> : R : \n\t" << print_t
             // the future becoming ready (predecessor) is actually passed on
 
             return hpx::dataflow(
-                util::unwrapping(
-                    [&](X && predecessor, Ts &&... ts)
+//                util::unwrapping(
+                    [&](Future<P> && predecessor, Ts &&... ts)
                     {
-                        std::cout << "then_execute dataflow : Received a value "
-                                  << predecessor << std::endl;
+//                        std::cout << "then_execute dataflow : Received a value "
+//                                  << predecessor << std::endl;
                         //
                         pre_execution_then_domain_schedule<pool_executor,
                             pool_numa_hint<Args...>>
                             pre_exec { pool_executor_, hint_ };
                             std::cout << "then_execute Function : \n\t" << print_type<F>() << "\n";
 
-                        return pre_exec.operator ()(std::forward<F>(f), std::forward<X>(predecessor));
-                }),
+                        return pre_exec.operator ()(std::forward<F>(f), std::forward<Future<P>>(predecessor));
+//                }),
+                },
                 std::move(predecessor), std::forward<Ts>(ts)...);
         }
 
