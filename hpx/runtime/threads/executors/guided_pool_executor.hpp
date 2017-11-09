@@ -23,17 +23,13 @@
 
 #include <hpx/config/warnings_prefix.hpp>
 
+// #define GUIDED_EXECUTOR_DEBUG 1
+
 // --------------------------------------------------------------------
 // pool_numa_hint
 // --------------------------------------------------------------------
 namespace hpx { namespace threads { namespace executors
 {
-    struct bitmap_storage
-    {
-        struct tls_tag {};
-        static util::thread_specific_ptr<hwloc_bitmap_ptr, tls_tag> bitmap_storage_;
-    };
-
     // --------------------------------------------------------------------
     // helper structs to make future<tuple<f1, f2, f3, ...>>>
     // detection of futures simpler
@@ -173,6 +169,9 @@ namespace hpx { namespace threads { namespace executors
             : pool_executor_(pool_name, priority, stacksize)
         {}
 
+        scheduled_executor &get_scheduled_executor() {
+            return pool_executor_;
+        }
     protected:
         pool_executor pool_executor_;
     };
@@ -202,6 +201,7 @@ namespace hpx { namespace threads { namespace executors
         future<typename util::detail::invoke_deferred_result<F, Ts...>::type>
         async_execute(F && f, Ts &&... ts)
         {
+#ifdef GUIDED_EXECUTOR_DEBUG
             typedef typename util::detail::invoke_deferred_result<F, Ts...>::type
                 result_type;
 
@@ -215,6 +215,7 @@ namespace hpx { namespace threads { namespace executors
                       << debug::print_type<pool_numa_hint<H,Tag>>() << "\n";
             std::cout << "async_execute : Hint   : "
                       << debug::print_type<H>() << "\n";
+#endif
 
             // hold onto the function until all futures have become ready
             // by using a dataflow operation, then call the scheduling hint
@@ -244,6 +245,7 @@ namespace hpx { namespace threads { namespace executors
         ->  future<typename util::detail::invoke_deferred_result<
             F, Future, Ts...>::type>
         {
+#ifdef GUIDED_EXECUTOR_DEBUG
             typedef typename util::detail::invoke_deferred_result<
                     F, Future, Ts...>::type result_type;
 
@@ -258,6 +260,7 @@ namespace hpx { namespace threads { namespace executors
                       << debug::print_type<Ts...>(" | ") << "\n";
             std::cout << "then_execute : Result       : "
                       << debug::print_type<result_type>() << "\n";
+#endif
 
             // Note : The Ts &&... args are not actually used in a continuation since
             // only the future becoming ready (predecessor) is actually passed onwards.
@@ -297,10 +300,6 @@ namespace hpx { namespace threads { namespace executors
         ->  future<typename util::detail::invoke_deferred_result<
             F, OuterFuture<util::tuple<InnerFutures... >>, Ts...>::type>
         {
-            typedef typename util::detail::invoke_deferred_result<
-                F, OuterFuture<util::tuple<InnerFutures... >>, Ts...>::type
-                    result_type;
-
             // get the tuple of futures from the predecessor future <tuple of futures>
             const auto & predecessor_value = future_extract_value().operator()(predecessor);
 
@@ -309,6 +308,11 @@ namespace hpx { namespace threads { namespace executors
                 future_extract_value{},
                 predecessor_value
             );
+
+#ifdef GUIDED_EXECUTOR_DEBUG
+            typedef typename util::detail::invoke_deferred_result<
+                F, OuterFuture<util::tuple<InnerFutures... >>, Ts...>::type
+                    result_type;
 
             std::cout << "when_all(fut) : Predecessor : "
                       << debug::print_type<OuterFuture<util::tuple<InnerFutures...>>>()
@@ -319,6 +323,7 @@ namespace hpx { namespace threads { namespace executors
                       << debug::print_type<Ts...>(" | ") << "\n";
             std::cout << "when_all(fut) : Result      : "
                       << debug::print_type<result_type>() << "\n";
+#endif
 
             return dataflow(
                 [&](OuterFuture<util::tuple<InnerFutures...>> && predecessor, Ts &&... ts)
@@ -365,6 +370,7 @@ namespace hpx { namespace threads { namespace executors
                 predecessor
             );
 
+#ifdef GUIDED_EXECUTOR_DEBUG
             std::cout << "dataflow      : Predecessor : "
                       << debug::print_type<util::tuple<InnerFutures...>>()
                       << "\n";
@@ -372,6 +378,7 @@ namespace hpx { namespace threads { namespace executors
                       << debug::print_type<decltype(unwrapped_futures_tuple)>(" | ") << "\n";
             std::cout << "dataflow-frame: Result      : "
                       << debug::print_type<Result>() << "\n";
+#endif
 
             // invoke the hint function with the unwrapped tuple futures
             int domain = util::invoke_fused(hint_, unwrapped_futures_tuple);
