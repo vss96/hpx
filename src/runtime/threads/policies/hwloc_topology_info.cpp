@@ -1168,11 +1168,21 @@ namespace hpx { namespace threads
         return true;
     }
 
+    util::thread_specific_ptr<hpx_hwloc_bitmap_wrapper, hwloc_topology_info::tls_tag> hwloc_topology_info::bitmap_storage_;
+
     threads::mask_type hwloc_topology_info::get_area_membind_nodeset(
-        const void *addr, std::size_t len, void *nodeset) const
+        const void *addr, std::size_t len) const
     {
+        hpx_hwloc_bitmap_wrapper *nodeset = hwloc_topology_info::bitmap_storage_.get();
+        if (nullptr == nodeset)
+        {
+            hwloc_bitmap_t nodeset_ = hwloc_bitmap_alloc();
+            hwloc_topology_info::bitmap_storage_.reset(new hpx_hwloc_bitmap_wrapper(nodeset_));
+            nodeset = hwloc_topology_info::bitmap_storage_.get();
+        }
+        //
         hwloc_membind_policy_t policy;
-        hwloc_nodeset_t ns = reinterpret_cast<hwloc_nodeset_t>(nodeset);
+        hwloc_nodeset_t ns = reinterpret_cast<hwloc_nodeset_t>(nodeset->get_bmp());
         hwloc_get_area_membind_nodeset(topo, addr, len, ns, &policy, 0);
         return bitmap_to_mask(ns, HWLOC_OBJ_NUMANODE);
     }

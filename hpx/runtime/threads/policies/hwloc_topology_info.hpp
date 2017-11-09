@@ -20,6 +20,7 @@
 #include <hpx/runtime/naming_fwd.hpp>
 #include <hpx/runtime/threads/topology.hpp>
 #include <hpx/runtime/resource/partitioner_fwd.hpp>
+#include <hpx/util/thread_specific_ptr.hpp>
 
 #include <hpx/util/spinlock.hpp>
 #include <hpx/util/static.hpp>
@@ -226,7 +227,7 @@ namespace hpx { namespace threads
         void deallocate(void* addr, std::size_t len) const;
 
         threads::mask_type get_area_membind_nodeset(
-            const void *addr, std::size_t len, void *nodeset) const;
+            const void *addr, std::size_t len) const;
 
         bool set_area_membind_nodeset(
             const void *addr, std::size_t len, void *nodeset) const;
@@ -335,6 +336,10 @@ namespace hpx { namespace threads
         std::vector<mask_type> numa_node_affinity_masks_;
         std::vector<mask_type> core_affinity_masks_;
         std::vector<mask_type> thread_affinity_masks_;
+
+        struct tls_tag {};
+        static util::thread_specific_ptr<hpx_hwloc_bitmap_wrapper, tls_tag> 
+            bitmap_storage_;
     };
 
     ///////////////////////////////////////////////////////////////////////////

@@ -208,7 +208,7 @@ namespace hpx { namespace threads
             hpx_hwloc_membind_policy policy, int flags) const = 0;
 
         virtual threads::mask_type get_area_membind_nodeset(
-            const void *addr, std::size_t len, void *nodeset) const = 0;
+            const void *addr, std::size_t len) const = 0;
 
         virtual bool set_area_membind_nodeset(
             const void *addr, std::size_t len, void *nodeset) const = 0;
