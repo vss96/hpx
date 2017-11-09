@@ -78,25 +78,25 @@ namespace hpx { namespace debug
     // usage : std::cout << print_type<args...>("separator")
     // separator is appended if the number of types > 1
     // --------------------------------------------------------------------
-    template<typename T=void, typename... Args>
-    inline std::string print_type(const char *delim="");
+    template <typename T=void>
+    inline std::string print_type(const char *delim="")
+    {
+        return std::string(debug::type_id<T>::typeid_.type_id());;
+    }
 
-    template<>
+    template <>
     inline std::string print_type<>(const char *delim)
     {
-        return "";
+        return "void";
     }
 
-    template<typename T, typename... Args>
-    inline std::string print_type(const char *delim)
+    template <typename T, typename ...Args>
+    inline typename std::enable_if<sizeof...(Args)!=0, std::string>::type
+    print_type(const char *delim="")
     {
         std::string temp(debug::type_id<T>::typeid_.type_id());
-        if constexpr (sizeof...(Args)>0) {
-            return temp + delim + print_type<Args...>(delim);
-        }
-        return temp;
+        return temp + delim + print_type<Args...>(delim);
     }
-
 }}
 
 #endif
