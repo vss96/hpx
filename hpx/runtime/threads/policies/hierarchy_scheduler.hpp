@@ -610,8 +610,9 @@ namespace hpx { namespace threads { namespace policies
         // TODO: add recycling
         void create_thread(thread_init_data& data, thread_id_type* id,
             thread_state_enum initial_state, bool run_now, error_code& ec,
-            std::size_t num_thread)
+            thread_schedule_hint thread_id)
         {
+            std::size_t num_thread = std::size_t(thread_id);
             HPX_ASSERT(tree.size());
             HPX_ASSERT(tree.back().size());
             tree.back()[0]->create_thread(data, id, initial_state,

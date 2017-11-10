@@ -96,7 +96,7 @@ namespace hpx { namespace lcos { namespace local
             threads::thread_id_type apply(launch policy,
                 threads::thread_priority priority,
                 threads::thread_stacksize stacksize,
-                threads::thread_schedule_hint schedulehint, // JB_EDIT
+                threads::thread_schedule_hint schedulehint,
                 error_code& ec) override
             {
                 this->check_started();
@@ -118,7 +118,8 @@ namespace hpx { namespace lcos { namespace local
                             &base_type::run_impl, std::move(this_)),
                         util::thread_description(f_, "task_object::apply"),
                         threads::pending_do_not_schedule, true,
-                        threads::thread_priority_boost, get_worker_thread_num(),
+                        threads::thread_priority_boost,
+                        threads::thread_schedule_hint(get_worker_thread_num()),
                         stacksize, ec);
                 }
                 else {
