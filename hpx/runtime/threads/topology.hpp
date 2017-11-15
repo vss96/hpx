@@ -213,7 +213,7 @@ namespace hpx { namespace threads
         virtual bool set_area_membind_nodeset(
             const void *addr, std::size_t len, void *nodeset) const = 0;
 
-        virtual int get_numa_domain(const void *addr, void *nodeset) const = 0;
+        virtual int get_numa_domain(const void *addr) const = 0;
 
         /// Free memory that was previously allocated by allocate
         virtual void deallocate(void* addr, std::size_t len) const = 0;

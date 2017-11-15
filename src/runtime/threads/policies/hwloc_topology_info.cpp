@@ -30,6 +30,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+//
+#include <errno.h>
 
 #include <hwloc.h>
 
@@ -1160,9 +1162,12 @@ namespace hpx { namespace threads
         hwloc_nodeset_t ns = reinterpret_cast<hwloc_nodeset_t>(nodeset);
         int ret = hwloc_set_area_membind_nodeset(topo, addr, len, ns, policy, 0);
         if (ret<0) {
+            std::string msg = std::strerror(errno);
+            if (errno == ENOSYS) msg = "the action is not supported";
+            if (errno == EXDEV)  msg = "the binding cannot be enforced";
             HPX_THROW_EXCEPTION(kernel_error
               , "hpx::threads::hwloc_topology_info::set_area_membind_nodeset"
-              , "hwloc_set_area_membind_nodeset failed");
+              , "hwloc_set_area_membind_nodeset failed : " + msg);
             return false;
         }
         return true;
@@ -1183,20 +1188,37 @@ namespace hpx { namespace threads
         //
         hwloc_membind_policy_t policy;
         hwloc_nodeset_t ns = reinterpret_cast<hwloc_nodeset_t>(nodeset->get_bmp());
-        hwloc_get_area_membind_nodeset(topo, addr, len, ns, &policy, 0);
+
+        if (hwloc_get_area_membind_nodeset(topo, addr, len, ns, &policy, 0)==-1) {
+            HPX_THROW_EXCEPTION(kernel_error
+              , "hpx::threads::hwloc_topology_info::get_area_membind_nodeset"
+              , "hwloc_get_area_membind_nodeset failed");
+            return -1;
+            std::cout << "error in  " ;
+        }
         return bitmap_to_mask(ns, HWLOC_OBJ_NUMANODE);
     }
 
-    int hwloc_topology_info::get_numa_domain(const void *addr, void *nodeset) const
+    int hwloc_topology_info::get_numa_domain(const void *addr) const
     {
 #if HWLOC_API_VERSION >= 0x00010b00
-        hwloc_nodeset_t ns = reinterpret_cast<hwloc_nodeset_t>(nodeset);
+        hpx_hwloc_bitmap_wrapper *nodeset = hwloc_topology_info::bitmap_storage_.get();
+        if (nullptr == nodeset)
+        {
+            hwloc_bitmap_t nodeset_ = hwloc_bitmap_alloc();
+            hwloc_topology_info::bitmap_storage_.reset(new hpx_hwloc_bitmap_wrapper(nodeset_));
+            nodeset = hwloc_topology_info::bitmap_storage_.get();
+        }
+        //
+        hwloc_nodeset_t ns = reinterpret_cast<hwloc_nodeset_t>(nodeset->get_bmp());
+
         int ret = hwloc_get_area_memlocation(topo, addr, 1,  ns,
             HWLOC_MEMBIND_BYNODESET);
         if (ret<0) {
+            std::string msg(strerror(errno));
             HPX_THROW_EXCEPTION(kernel_error
-              , "hpx::threads::hwloc_topology_info::set_area_membind_nodeset"
-              , "hwloc_set_area_membind_nodeset failed");
+              , "hpx::threads::hwloc_topology_info::get_numa_domain"
+              , "hwloc_get_area_memlocation failed " + msg);
             return -1;
         }
         threads::mask_type mask = bitmap_to_mask(ns, HWLOC_OBJ_NUMANODE);

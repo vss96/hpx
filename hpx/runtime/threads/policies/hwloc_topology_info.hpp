@@ -232,7 +232,7 @@ namespace hpx { namespace threads
         bool set_area_membind_nodeset(
             const void *addr, std::size_t len, void *nodeset) const;
 
-        int get_numa_domain(const void *addr, void *nodeset) const;
+        int get_numa_domain(const void *addr) const;
 
         void print_vector(
             std::ostream& os, std::vector<std::size_t> const& v) const;
@@ -338,7 +338,7 @@ namespace hpx { namespace threads
         std::vector<mask_type> thread_affinity_masks_;
 
         struct tls_tag {};
-        static util::thread_specific_ptr<hpx_hwloc_bitmap_wrapper, tls_tag> 
+        static util::thread_specific_ptr<hpx_hwloc_bitmap_wrapper, tls_tag>
             bitmap_storage_;
     };
 
