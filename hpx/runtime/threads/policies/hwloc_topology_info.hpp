@@ -80,7 +80,9 @@ namespace hpx { namespace threads
         membind_replicate  = HWLOC_MEMBIND_REPLICATE,
 #endif
         membind_nexttouch  = HWLOC_MEMBIND_NEXTTOUCH,
-        membind_mixed      = HWLOC_MEMBIND_MIXED
+        membind_mixed      = HWLOC_MEMBIND_MIXED,
+        // special HPX addition
+        membind_user       = 256
     };
 
     struct HPX_EXPORT hwloc_topology_info : topology
