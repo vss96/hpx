@@ -9,6 +9,7 @@
 
 #include <hpx/config.hpp>
 #include <string>
+#include <type_traits>
 
 #if defined(__GNUC__)
 #include <cxxabi.h>
