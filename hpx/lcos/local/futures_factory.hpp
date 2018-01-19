@@ -104,15 +104,7 @@ namespace hpx { namespace lcos { namespace local
                 typedef typename Base::future_base_type future_base_type;
                 future_base_type this_(this);
 
-                if (this->sched_) {
-                    this->sched_->add(
-                        util::deferred_call(
-                            &base_type::run_impl, std::move(this_)),
-                        util::thread_description(f_, "task_object::apply"),
-                        threads::pending, false, stacksize, schedulehint, ec);
-                    return threads::invalid_thread_id;
-                }
-                else if (policy == launch::fork) {
+                if (policy == launch::fork) {
                     return threads::register_thread_nullary(
                         util::deferred_call(
                             &base_type::run_impl, std::move(this_)),
@@ -188,7 +180,9 @@ namespace hpx { namespace lcos { namespace local
             // run in a separate thread
             threads::thread_id_type apply(launch policy,
                 threads::thread_priority priority,
-                threads::thread_stacksize stacksize, error_code& ec) override
+                threads::thread_stacksize stacksize,
+                threads::thread_schedule_hint schedulehint,
+                error_code& ec) override
             {
                 this->check_started();
 
@@ -201,7 +195,8 @@ namespace hpx { namespace lcos { namespace local
                             &base_type::run_impl, std::move(this_)),
                         util::thread_description(this->f_, "task_object::apply"),
                         threads::pending_do_not_schedule, true,
-                        threads::thread_priority_boost, get_worker_thread_num(),
+                        threads::thread_priority_boost,
+                        threads::thread_schedule_hint(get_worker_thread_num()),
                         stacksize, ec);
                 }
                 else {
@@ -209,7 +204,8 @@ namespace hpx { namespace lcos { namespace local
                         util::deferred_call(
                             &base_type::run_impl, std::move(this_)),
                         util::thread_description(this->f_, "task_object::apply"),
-                        threads::pending, false, priority, std::size_t(-1),
+                        threads::pending, false, priority,
+                        threads::thread_schedule_hint_none,
                         stacksize, ec);
                     return threads::invalid_thread_id;
                 }
