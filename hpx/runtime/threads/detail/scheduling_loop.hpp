@@ -427,7 +427,6 @@ namespace hpx { namespace threads { namespace detail
         scheduling_counters& counters, scheduling_callbacks& params)
     {
         std::atomic<hpx::state>& this_state = scheduler.get_state(num_thread);
-
 #if HPX_HAVE_ITTNOTIFY != 0 && !defined(HPX_HAVE_APEX)
         util::itt::stack_context ctx;        // helper for itt support
         util::itt::domain domain = hpx::get_thread_itt_domain();
