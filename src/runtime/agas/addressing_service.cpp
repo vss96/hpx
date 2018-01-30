@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //  Copyright (c) 2011 Bryce Adelstein-Lelbach
-//  Copyright (c) 2011-2017 Hartmut Kaiser
+//  Copyright (c) 2011-2018 Hartmut Kaiser
 //  Copyright (c) 2016 Parsa Amini
 //  Copyright (c) 2016 Thomas Heller
 //
@@ -12,6 +12,7 @@
 #include <hpx/exception.hpp>
 #include <hpx/runtime.hpp>
 #include <hpx/apply.hpp>
+#include <hpx/async.hpp>
 #include <hpx/traits/action_priority.hpp>
 #include <hpx/traits/action_was_object_migrated.hpp>
 #include <hpx/traits/component_supports_migration.hpp>
@@ -31,6 +32,7 @@
 #include <hpx/runtime/find_localities.hpp>
 #include <hpx/runtime/naming/split_gid.hpp>
 #include <hpx/util/bind.hpp>
+#include <hpx/util/bind_back.hpp>
 #include <hpx/util/format.hpp>
 #include <hpx/util/logging.hpp>
 #include <hpx/util/runtime_configuration.hpp>
@@ -43,7 +45,6 @@
 #include <hpx/performance_counters/counter_creators.hpp>
 #include <hpx/performance_counters/manage_counter_type.hpp>
 #include <hpx/lcos/wait_all.hpp>
-#include <hpx/lcos/broadcast.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -1644,10 +1645,9 @@ lcos::future<bool> addressing_service::register_name_async(
     std::int64_t new_credit = naming::detail::get_credit_from_gid(new_gid);
     if (new_credit != 0)
     {
-        using util::placeholders::_1;
-        return f.then(util::bind(
+        return f.then(util::bind_back(
                 util::one_shot(&correct_credit_on_failure),
-                _1, id, std::int64_t(HPX_GLOBALCREDIT_INITIAL), new_credit
+                id, std::int64_t(HPX_GLOBALCREDIT_INITIAL), new_credit
             ));
     }
 
@@ -1730,51 +1730,11 @@ future<hpx::id_type> addressing_service::on_symbol_namespace_event(
         ));
 }
 
-}}
-
-///////////////////////////////////////////////////////////////////////////////
-typedef hpx::agas::server::symbol_namespace::on_event_action
-    symbol_namespace_on_event_action;
-
-HPX_REGISTER_BROADCAST_ACTION_DECLARATION(symbol_namespace_on_event_action,
-    symbol_namespace_on_event_action)
-HPX_REGISTER_BROADCAST_ACTION_ID(symbol_namespace_on_event_action,
-    symbol_namespace_on_event_action,
-    hpx::actions::broadcast_symbol_namespace_on_event_action_id)
-
-namespace hpx { namespace agas
-{
-    namespace detail
-    {
-        std::vector<hpx::id_type> find_all_symbol_namespace_services()
-        {
-            std::vector<hpx::id_type> ids;
-            for (hpx::id_type const& id : hpx::find_all_localities())
-            {
-                ids.push_back(hpx::id_type(
-                    agas::symbol_namespace::get_service_instance(id),
-                    id_type::unmanaged));
-            }
-            return ids;
-        }
-    }
-
-/// Invoke the supplied hpx::function for every registered global name
-bool addressing_service::iterate_ids(
-    iterate_names_function_type const& f
-  , error_code& ec
-    )
-{ // {{{
-    try {
-        server::symbol_namespace::iterate_action act;
-        lcos::broadcast(act, detail::find_all_symbol_namespace_services(), f).get(ec);
-
-        return !ec;
-    }
-    catch (hpx::exception const& e) {
-        HPX_RETHROWS_IF(ec, e, "addressing_service::iterate_ids");
-        return false;
-    }
+// Return all matching entries in the symbol namespace
+hpx::future<addressing_service::iterate_names_return_type>
+    addressing_service::iterate_ids(std::string const& pattern)
+{    // {{{
+    return symbol_ns_.iterate_async(pattern);
 } // }}}
 
 // This function has to return false if the key is already in the cache (true
@@ -2218,46 +2178,43 @@ std::uint64_t addressing_service::get_cache_erase_entry_time(bool reset)
 /// Install performance counter types exposing properties from the local cache.
 void addressing_service::register_counter_types()
 { // {{{
-    using util::placeholders::_1;
-    using util::placeholders::_2;
-
     // install
     util::function_nonser<std::int64_t(bool)> cache_entries(
-        util::bind(&addressing_service::get_cache_entries, this, _1));
+        util::bind_front(&addressing_service::get_cache_entries, this));
     util::function_nonser<std::int64_t(bool)> cache_hits(
-        util::bind(&addressing_service::get_cache_hits, this, _1));
+        util::bind_front(&addressing_service::get_cache_hits, this));
     util::function_nonser<std::int64_t(bool)> cache_misses(
-        util::bind(&addressing_service::get_cache_misses, this, _1));
+        util::bind_front(&addressing_service::get_cache_misses, this));
     util::function_nonser<std::int64_t(bool)> cache_evictions(
-        util::bind(&addressing_service::get_cache_evictions, this, _1));
+        util::bind_front(&addressing_service::get_cache_evictions, this));
     util::function_nonser<std::int64_t(bool)> cache_insertions(
-        util::bind(&addressing_service::get_cache_insertions, this, _1));
+        util::bind_front(&addressing_service::get_cache_insertions, this));
 
     util::function_nonser<std::int64_t(bool)> cache_get_entry_count(
-        util::bind(
-            &addressing_service::get_cache_get_entry_count, this, _1));
+        util::bind_front(
+            &addressing_service::get_cache_get_entry_count, this));
     util::function_nonser<std::int64_t(bool)> cache_insertion_count(
-        util::bind(
-            &addressing_service::get_cache_insertion_entry_count, this, _1));
+        util::bind_front(
+            &addressing_service::get_cache_insertion_entry_count, this));
     util::function_nonser<std::int64_t(bool)> cache_update_entry_count(
-        util::bind(
-            &addressing_service::get_cache_update_entry_count, this, _1));
+        util::bind_front(
+            &addressing_service::get_cache_update_entry_count, this));
     util::function_nonser<std::int64_t(bool)> cache_erase_entry_count(
-        util::bind(
-            &addressing_service::get_cache_erase_entry_count, this, _1));
+        util::bind_front(
+            &addressing_service::get_cache_erase_entry_count, this));
 
     util::function_nonser<std::int64_t(bool)> cache_get_entry_time(
-        util::bind(
-            &addressing_service::get_cache_get_entry_time, this, _1));
+        util::bind_front(
+            &addressing_service::get_cache_get_entry_time, this));
     util::function_nonser<std::int64_t(bool)> cache_insertion_time(
-        util::bind(
-            &addressing_service::get_cache_insertion_entry_time, this, _1));
+        util::bind_front(
+            &addressing_service::get_cache_insertion_entry_time, this));
     util::function_nonser<std::int64_t(bool)> cache_update_entry_time(
-        util::bind(
-            &addressing_service::get_cache_update_entry_time, this, _1));
+        util::bind_front(
+            &addressing_service::get_cache_update_entry_time, this));
     util::function_nonser<std::int64_t(bool)> cache_erase_entry_time(
-        util::bind(
-            &addressing_service::get_cache_erase_entry_time, this, _1));
+        util::bind_front(
+            &addressing_service::get_cache_erase_entry_time, this));
 
     performance_counters::generic_counter_type_data const counter_types[] =
     {
@@ -2796,8 +2753,8 @@ namespace hpx
 {
     namespace detail
     {
-        std::string name_from_basename(std::string const& basename,
-            std::size_t idx)
+        std::string name_from_basename(
+            std::string const& basename, std::size_t idx)
         {
             HPX_ASSERT(!basename.empty());
 
@@ -2816,8 +2773,8 @@ namespace hpx
     }
 
     ///////////////////////////////////////////////////////////////////////////
-    std::vector<hpx::future<hpx::id_type> >
-        find_all_from_basename(std::string const& basename, std::size_t num_ids)
+    std::vector<hpx::future<hpx::id_type>> find_all_from_basename(
+        std::string basename, std::size_t num_ids)
     {
         if (basename.empty())
         {
@@ -2836,9 +2793,8 @@ namespace hpx
         return results;
     }
 
-    std::vector<hpx::future<hpx::id_type> >
-        find_from_basename(std::string const& basename,
-            std::vector<std::size_t> const& ids)
+    std::vector<hpx::future<hpx::id_type>> find_from_basename(
+        std::string basename, std::vector<std::size_t> const& ids)
     {
         if (basename.empty())
         {
@@ -2850,14 +2806,15 @@ namespace hpx
         std::vector<hpx::future<hpx::id_type> > results;
         for (std::size_t i : ids)
         {
-            std::string name = detail::name_from_basename(basename, i); //-V106
+            std::string name =
+                detail::name_from_basename(basename, i);    //-V106
             results.push_back(agas::on_symbol_namespace_event(
                 std::move(name), true));
         }
         return results;
     }
 
-    hpx::future<hpx::id_type> find_from_basename(std::string const& basename,
+    hpx::future<hpx::id_type> find_from_basename(std::string basename,
         std::size_t sequence_nr)
     {
         if (basename.empty())
@@ -2868,13 +2825,16 @@ namespace hpx
         }
 
         if (sequence_nr == std::size_t(~0U))
-            sequence_nr = std::size_t(naming::get_locality_id_from_id(find_here()));
+        {
+            sequence_nr =
+                std::size_t(naming::get_locality_id_from_id(find_here()));
+        }
 
         std::string name = detail::name_from_basename(basename, sequence_nr);
         return agas::on_symbol_namespace_event(std::move(name), true);
     }
 
-    hpx::future<bool> register_with_basename(std::string const& basename,
+    hpx::future<bool> register_with_basename(std::string basename,
         hpx::id_type id, std::size_t sequence_nr)
     {
         if (basename.empty())
@@ -2885,14 +2845,17 @@ namespace hpx
         }
 
         if (sequence_nr == std::size_t(~0U))
-            sequence_nr = std::size_t(naming::get_locality_id_from_id(find_here()));
+        {
+            sequence_nr =
+                std::size_t(naming::get_locality_id_from_id(find_here()));
+        }
 
         std::string name = detail::name_from_basename(basename, sequence_nr);
         return agas::register_name(std::move(name), id);
     }
 
     hpx::future<hpx::id_type> unregister_with_basename(
-        std::string const& basename, std::size_t sequence_nr)
+        std::string basename, std::size_t sequence_nr)
     {
         if (basename.empty())
         {
@@ -2902,7 +2865,10 @@ namespace hpx
         }
 
         if (sequence_nr == std::size_t(~0U))
-            sequence_nr = std::size_t(naming::get_locality_id_from_id(find_here()));
+        {
+            sequence_nr =
+                std::size_t(naming::get_locality_id_from_id(find_here()));
+        }
 
         std::string name = detail::name_from_basename(basename, sequence_nr);
         return agas::unregister_name(std::move(name));

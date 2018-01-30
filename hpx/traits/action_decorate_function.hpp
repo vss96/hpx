@@ -1,4 +1,4 @@
-//  Copyright (c) 2007-2016 Hartmut Kaiser
+//  Copyright (c) 2007-2018 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,8 +9,10 @@
 #include <hpx/runtime/naming_fwd.hpp>
 #include <hpx/runtime/threads/thread_data_fwd.hpp>
 #include <hpx/traits/detail/wrap_int.hpp>
+#include <hpx/traits/has_xxx.hpp>
 #include <hpx/util/unique_function.hpp>
 
+#include <type_traits>
 #include <utility>
 
 namespace hpx { namespace traits
@@ -50,11 +52,20 @@ namespace hpx { namespace traits
             return decorate_function_helper::template call<Action>(
                 0, lva, std::forward<F>(f));
         }
+
+        HPX_HAS_XXX_TRAIT_DEF(decorates_action);
     }
+
+    template <typename Action, typename Enable = void>
+    struct has_decorates_action
+      : detail::has_decorates_action<typename std::decay<Action>::type>
+    {};
 
     template <typename Action, typename Enable = void>
     struct action_decorate_function
     {
+        static constexpr bool value = has_decorates_action<Action>::value;
+
         template <typename F>
         static threads::thread_function_type
         call(naming::address_type lva, F && f)

@@ -3,13 +3,13 @@
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
+#include <hpx/lcos/future.hpp>
 #include <hpx/runtime/threads/thread.hpp>
 
 #include <hpx/error_code.hpp>
 #include <hpx/exception.hpp>
 #include <hpx/throw_exception.hpp>
 #include <hpx/lcos/detail/future_data.hpp>
-#include <hpx/lcos/future.hpp>
 #include <hpx/runtime_fwd.hpp>
 #include <hpx/runtime/threads/thread_data_fwd.hpp>
 #include <hpx/runtime/threads/thread_helpers.hpp>
@@ -51,11 +51,10 @@ namespace hpx
 
     ///////////////////////////////////////////////////////////////////////////
     thread::thread() noexcept
-      : id_(threads::invalid_thread_id)
+      : id_(hpx::threads::invalid_thread_id)
     {}
 
     thread::thread(thread&& rhs) noexcept
-      : id_(threads::invalid_thread_id)   // the rhs needs to end up with an invalid_id
     {
         std::lock_guard<mutex_type> l(rhs.mtx_);
         id_ = rhs.id_;
@@ -138,7 +137,8 @@ namespace hpx
         // run all callbacks attached to the exit event for this thread
         run_thread_exit_callbacks();
 
-        return threads::thread_result_type(threads::terminated, nullptr);
+        return threads::thread_result_type(threads::terminated,
+            threads::invalid_thread_id);
     }
 
     thread::id thread::get_id() const noexcept
@@ -246,7 +246,6 @@ namespace hpx
 
         public:
             thread_task_base(threads::thread_id_type const& id)
-              : id_(threads::invalid_thread_id)
             {
                 if (threads::add_thread_exit_callback(id,
                         util::bind(&thread_task_base::thread_exit_function,

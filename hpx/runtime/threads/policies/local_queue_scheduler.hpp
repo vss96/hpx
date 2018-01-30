@@ -278,12 +278,18 @@ namespace hpx { namespace threads { namespace policies
         }
 
         ///////////////////////////////////////////////////////////////////////
-        bool cleanup_terminated(bool delete_all = false)
+        bool cleanup_terminated(bool delete_all)
         {
             bool empty = true;
             for (std::size_t i = 0; i != queues_.size(); ++i)
                 empty = queues_[i]->cleanup_terminated(delete_all) && empty;
+
             return empty;
+        }
+
+        bool cleanup_terminated(std::size_t num_thread, bool delete_all)
+        {
+            return queues_[num_thread]->cleanup_terminated(delete_all);
         }
 
         ///////////////////////////////////////////////////////////////////////
@@ -311,18 +317,18 @@ namespace hpx { namespace threads { namespace policies
             if (num_thread >= queue_size)
                 num_thread %= queue_size;
 
-            // Select a OS thread which hasn't been disabled
-            auto const& rp = resource::get_partitioner();
-            auto mask = rp.get_pu_mask(
-                num_thread + parent_pool_->get_thread_offset());
-            if(!threads::any(mask))
-                threads::set(mask, num_thread + parent_pool_->get_thread_offset());
-            while (true)
+            // Select an OS thread which hasn't been disabled
+            std::unique_lock<compat::mutex> l;
+            if (mode_ & threads::policies::enable_elasticity)
             {
-                if (bit_and(mask, parent_pool_->get_used_processing_units()))
-                    break;
-
-                num_thread = (num_thread + 1) % queue_size;
+                l = std::unique_lock<compat::mutex>(pu_mtxs_[num_thread],
+                    std::try_to_lock);
+                while (!l.owns_lock() || states_[num_thread] > state_suspended)
+                {
+                    num_thread = (num_thread + 1) % queue_size;
+                    l = std::unique_lock<compat::mutex>(pu_mtxs_[num_thread],
+                        std::try_to_lock);
+                }
             }
 
             HPX_ASSERT(num_thread < queue_size);
@@ -454,6 +460,8 @@ namespace hpx { namespace threads { namespace policies
             if (std::size_t(-1) == num_thread)
                 num_thread = curr_queue_++ % queues_.size();
 
+            HPX_ASSERT(thrd->get_scheduler_base() == this);
+
             HPX_ASSERT(num_thread < queues_.size());
             queues_[num_thread]->schedule_thread(thrd);
         }
@@ -465,6 +473,8 @@ namespace hpx { namespace threads { namespace policies
             if (std::size_t(-1) == num_thread)
                 num_thread = curr_queue_++ % queues_.size();
 
+            HPX_ASSERT(thrd->get_scheduler_base() == this);
+
             HPX_ASSERT(num_thread < queues_.size());
             queues_[num_thread]->schedule_thread(thrd, true);
         }
@@ -472,6 +482,8 @@ namespace hpx { namespace threads { namespace policies
         /// Destroy the passed thread as it has been terminated
         bool destroy_thread(threads::thread_data* thrd, std::int64_t& busy_count)
         {
+            HPX_ASSERT(thrd->get_scheduler_base() == this);
+
             for (std::size_t i = 0; i != queues_.size(); ++i)
             {
                 if (queues_[i]->destroy_thread(thrd, busy_count))
@@ -645,15 +657,9 @@ namespace hpx { namespace threads { namespace policies
             if (0 != added) return result;
 
             // Check if we have been disabled
+            if (!running)
             {
-                auto const& rp = resource::get_partitioner();
-                auto mask = rp.get_pu_mask(
-                    num_thread + parent_pool_->get_thread_offset());
-
-                if (!bit_and(mask, parent_pool_->get_used_processing_units()))
-                {
-                    return added == 0 && !running;
-                }
+                return true;
             }
 
             if (numa_sensitive_ != 0)   // limited or no stealing across domains

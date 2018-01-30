@@ -114,7 +114,7 @@ parallel::is_executor                      "is_executor"                   "hpx\
 
 parallel::execution::sequenced_execution_tag          "sequenced_execution_tag"       "hpx\.parallel\.execution\.sequenced_execution_tag.*"
 parallel::execution::parallel_execution_tag           "parallel_execution_tag"        "hpx\.parallel\.execution\.parallel_execution_tag.*"
-parallel::execution::vector_execution_tag             "vector_execution_tag"          "hpx\.parallel\.execution\.vector_execution_tag.*"
+parallel::execution::unsequenced_execution_tag        "unsequenced_execution_tag"     "hpx\.parallel\.execution\.unsequenced_execution_tag.*"
 
 # hpx/parallel/executors/sequential_executor.hpp
 parallel::execution::sequenced_executor              "sequenced_executor"           "hpx\.parallel\.execution\.sequenced_executor.*"
@@ -271,6 +271,10 @@ parallel::reduction_bit_or            "reduction_bit_or" "hpx\.parallel\.v2\.red
 parallel::reduction_bit_xor           "reduction_bit_xor" "hpx\.parallel\.v2\.reduction_bit_xor"
 parallel::reduction_min               "reduction_min" "hpx\.parallel\.v2\.reduction_min"
 parallel::reduction_max               "reduction_max" "hpx\.parallel\.v2\.reduction_max"
+
+# hpx/parallel/algorithms/remove.hpp
+parallel::remove                      "remove" "hpx\.parallel\.v1\.remove_id.*"
+parallel::remove_if                   "remove_if" "hpx\.parallel\.v1\.remove_if_id.*"
 
 # hpx/parallel/algorithms/remove_copy.hpp
 parallel::remove_copy                  "remove_copy" "hpx\.parallel\.v1\.remove_copy$"

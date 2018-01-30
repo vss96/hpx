@@ -16,28 +16,29 @@
 #include <hpx/util/runtime_configuration.hpp>
 #include <hpx/util/unlock_guard.hpp>
 
+#include <hpx/lcos/wait_all.hpp>
+#include <hpx/performance_counters/counters.hpp>
 #include <hpx/runtime/actions/continuation.hpp>
 #include <hpx/runtime/actions/plain_action.hpp>
 #include <hpx/runtime/agas/interface.hpp>
-#include <hpx/runtime/components/server/runtime_support.hpp>
+#include <hpx/runtime/components/component_commandline_base.hpp>
+#include <hpx/runtime/components/component_startup_shutdown_base.hpp>
 #include <hpx/runtime/components/server/component_database.hpp>
 #include <hpx/runtime/components/server/create_component.hpp>
-#include <hpx/runtime/components/server/memory_block.hpp>
 #include <hpx/runtime/components/server/memory.hpp>
-#include <hpx/runtime/components/stubs/runtime_support.hpp>
-#include <hpx/runtime/components/component_startup_shutdown_base.hpp>
-#include <hpx/runtime/components/component_commandline_base.hpp>
+#include <hpx/runtime/components/server/memory_block.hpp>
+#include <hpx/runtime/components/server/runtime_support.hpp>
 #include <hpx/runtime/components/static_factory_data.hpp>
+#include <hpx/runtime/components/stubs/runtime_support.hpp>
 #include <hpx/runtime/find_localities.hpp>
 #include <hpx/runtime/naming/resolver_client.hpp>
 #include <hpx/runtime/naming/unmanaged.hpp>
-#include <hpx/runtime/threads/coroutines/coroutine.hpp>
-#include <hpx/runtime/threads/threadmanager.hpp>
 #include <hpx/runtime/serialization/serialize.hpp>
 #include <hpx/runtime/serialization/vector.hpp>
 #include <hpx/runtime/shutdown_function.hpp>
 #include <hpx/runtime/startup_function.hpp>
-#include <hpx/lcos/wait_all.hpp>
+#include <hpx/runtime/threads/coroutines/coroutine.hpp>
+#include <hpx/runtime/threads/threadmanager.hpp>
 
 #include <hpx/lcos/barrier.hpp>
 #include <hpx/lcos/broadcast.hpp>
@@ -409,16 +410,13 @@ namespace hpx { namespace components { namespace server
         // it hands over the token to machine nr.i.
         threads::threadmanager& tm = appl.get_thread_manager();
 
-        for (std::size_t k = 0;
-            tm.get_thread_count() > std::int64_t(1 + hpx::get_os_thread_count());
-            ++k)
-        {
-            tm.cleanup_terminated(true);
-            // avoid timed suspension, don't boost priority
-            util::detail::yield_k(k % 32,
-                "runtime_support::dijkstra_termination",
-                hpx::threads::pending);
-        }
+        util::detail::yield_while([&tm]()
+            {
+                tm.cleanup_terminated(true);
+                return tm.get_thread_count() >
+                    std::int64_t(1) + tm.get_background_thread_count();
+            }, "runtime_support::dijkstra_termination", hpx::threads::pending,
+            false); // Don't allow timed suspension
 
         // Now this locality has become passive, thus we can send the token
         // to the next locality.
@@ -451,16 +449,13 @@ namespace hpx { namespace components { namespace server
             applier::applier& appl = hpx::applier::get_applier();
             threads::threadmanager& tm = appl.get_thread_manager();
 
-            for (std::size_t k = 0;
-                tm.get_thread_count() > std::int64_t(1 + hpx::get_os_thread_count());
-                ++k)
-            {
-                tm.cleanup_terminated(true);
-                // avoid timed suspension, don't boost priority
-                util::detail::yield_k(k % 32,
-                    "runtime_support::dijkstra_termination_detection",
-                    hpx::threads::pending);
-            }
+            util::detail::yield_while([&tm]()
+                {
+                    tm.cleanup_terminated(true);
+                    return tm.get_thread_count() >
+                        std::int64_t(1) + tm.get_background_thread_count();
+                }, "runtime_support::dijkstra_termination",
+                hpx::threads::pending, false); // Don't allow timed suspension
 
             return 0;
         }
@@ -515,16 +510,13 @@ namespace hpx { namespace components { namespace server
         applier::applier& appl = hpx::applier::get_applier();
         threads::threadmanager& tm = appl.get_thread_manager();
 
-        for (std::size_t k = 0;
-            tm.get_thread_count() > std::int64_t(1 + hpx::get_os_thread_count());
-            ++k)
-        {
-            tm.cleanup_terminated(true);
-            // avoid timed suspension, don't boost priority
-            util::detail::yield_k(k % 32,
-                "runtime_support::send_dijkstra_termination_token",
-                hpx::threads::pending);
-        }
+        util::detail::yield_while([&tm]()
+            {
+                tm.cleanup_terminated(true);
+                return tm.get_thread_count() >
+                    std::int64_t(1) + tm.get_background_thread_count();
+            }, "runtime_support::dijkstra_termination", hpx::threads::pending,
+            false); // Don't allow timed suspension
 
         // Now this locality has become passive, thus we can send the token
         // to the next locality.
@@ -595,16 +587,13 @@ namespace hpx { namespace components { namespace server
             applier::applier& appl = hpx::applier::get_applier();
             threads::threadmanager& tm = appl.get_thread_manager();
 
-            for (std::size_t k = 0;
-                tm.get_thread_count() > std::int64_t(1 + hpx::get_os_thread_count());
-                ++k)
-            {
-                tm.cleanup_terminated(true);
-                // avoid timed suspension, don't boost priority
-                util::detail::yield_k(k % 32,
-                    "runtime_support::dijkstra_termination_detection",
-                    hpx::threads::pending);
-            }
+            util::detail::yield_while([&tm]()
+                {
+                    tm.cleanup_terminated(true);
+                    return tm.get_thread_count() >
+                        std::int64_t(1) + tm.get_background_thread_count();
+                }, "runtime_support::dijkstra_termination",
+                hpx::threads::pending, false); // Don't allow timed suspension
 
             return 0;
         }
@@ -677,6 +666,10 @@ namespace hpx { namespace components { namespace server
         agas_client.start_shutdown();
 
         stop_evaluating_counters();
+
+        // wake up suspended pus
+        threads::threadmanager& tm = appl.get_thread_manager();
+        tm.resume();
 
         std::vector<naming::id_type> locality_ids = find_all_localities();
         std::size_t count = dijkstra_termination_detection(locality_ids);
@@ -846,7 +839,8 @@ namespace hpx { namespace components { namespace server
         // give the scheduler some time to work on remaining tasks
         {
             util::unlock_guard<Lock> ul(l);
-            self->yield(threads::thread_result_type(threads::pending, nullptr));
+            self->yield(threads::thread_result_type(threads::pending,
+                threads::invalid_thread_id));
         }
 
         // get rid of all terminated threads
@@ -874,26 +868,21 @@ namespace hpx { namespace components { namespace server
 
             stopped_ = true;
 
-            for (std::size_t k = 0;
-                tm.get_thread_count() >
-                    std::int64_t(1 + hpx::get_os_thread_count());
-                ++k)
-            {
-                // let thread-manager clean up threads
-                cleanup_threads(tm, l);
-
-                // obey timeout
-                if (timeout >= 0.0 && timeout < (t.elapsed() - start_time))
+            util::detail::yield_while(
+                [&tm, &l, timeout, &t, start_time, &timed_out]()
                 {
-                    // we waited long enough
-                    timed_out = true;
-                    break;
-                }
+                    cleanup_threads(tm, l);
 
-                // avoid timed suspension, don't boost priority
-                util::detail::yield_k(k % 32,
-                    "runtime_support::stop", hpx::threads::pending);
-            }
+                    if (timeout >= 0.0 && timeout < (t.elapsed() - start_time))
+                    {
+                        timed_out = true;
+                        return false;
+                    }
+
+                    return tm.get_thread_count() >
+                        std::int64_t(1) + tm.get_background_thread_count();
+                }, "runtime_support::stop", hpx::threads::pending,
+                false); // Don't allow timed suspension
 
             // If it took longer than expected, kill all suspended threads as
             // well.
@@ -901,28 +890,20 @@ namespace hpx { namespace components { namespace server
                 // now we have to wait for all threads to be aborted
                 start_time = t.elapsed();
 
-                for (std::size_t k = 0;
-                    tm.get_thread_count() >
-                        std::int64_t(1 + hpx::get_os_thread_count());
-                    ++k)
-                {
-                    // abort all suspended threads
-                    tm.abort_all_suspended_threads();
-
-                    // let thread-manager clean up threads
-                    cleanup_threads(tm, l);
-
-                    // obey timeout
-                    if (timeout >= 0.0 && timeout < (t.elapsed() - start_time))
+                util::detail::yield_while([&tm, &l, timeout, &t, start_time]()
                     {
-                        // we waited long enough
-                        break;
-                    }
+                        tm.abort_all_suspended_threads();
+                        cleanup_threads(tm, l);
 
-                    // avoid timed suspension, don't boost priority
-                    util::detail::yield_k(k % 32,
-                        "runtime_support::stop", hpx::threads::pending);
-                }
+                        if (timeout >= 0.0 && timeout < (t.elapsed() - start_time))
+                        {
+                            return false;
+                        }
+
+                        return tm.get_thread_count() >
+                            std::int64_t(1) + tm.get_background_thread_count();
+                    }, "runtime_support::dijkstra_termination", hpx::threads::pending,
+                    false); // Don't allow timed suspension
             }
 
             // Drop the locality from the partition table.

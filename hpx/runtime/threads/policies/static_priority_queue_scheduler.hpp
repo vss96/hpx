@@ -62,6 +62,18 @@ namespace hpx { namespace threads { namespace policies
             return "static_priority_queue_scheduler";
         }
 
+        void suspend(std::size_t)
+        {
+            HPX_ASSERT_MSG(false, "static_priority_queue_scheduler does not"
+                " support suspending");
+        }
+
+        void resume(std::size_t)
+        {
+            HPX_ASSERT_MSG(false, "static_priority_queue_scheduler does not"
+                " support resuming");
+        }
+
         /// Return the next thread to be executed, return false if non is
         /// available
         bool get_next_thread(std::size_t num_thread, bool running,
@@ -126,15 +138,9 @@ namespace hpx { namespace threads { namespace policies
             if (0 != added) return result;
 
             // Check if we have been disabled
+            if (!running)
             {
-                auto const& rp = resource::get_partitioner();
-                auto mask = rp.get_pu_mask(
-                    num_thread + this->parent_pool_->get_thread_offset());
-
-                if (!bit_and(mask, this->parent_pool_->get_used_processing_units()))
-                {
-                    return added == 0 && !running;
-                }
+                return true;
             }
 
 #ifdef HPX_HAVE_THREAD_MINIMAL_DEADLOCK_DETECTION

@@ -1,4 +1,4 @@
-//  Copyright (c) 2007-2017 Hartmut Kaiser
+//  Copyright (c) 2007-2018 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -21,6 +21,7 @@
 #include <hpx/runtime/serialization/vector.hpp>
 #include <hpx/traits/is_distribution_policy.hpp>
 #include <hpx/util/assert.hpp>
+#include <hpx/util/bind_back.hpp>
 #include <hpx/util/unwrap.hpp>
 
 #include <algorithm>
@@ -245,10 +246,9 @@ namespace hpx { namespace components
                     get_component_name<Component>(),
                     counter_name_, localities_);
 
-            using hpx::util::placeholders::_1;
-            return values.then(hpx::util::bind(
+            return values.then(hpx::util::bind_back(
                 detail::create_helper<Component>(localities_),
-                _1, std::forward<Ts>(vs)...));
+                std::forward<Ts>(vs)...));
         }
 
         /// \cond NOINTERNAL
@@ -280,11 +280,10 @@ namespace hpx { namespace components
                     get_component_name<Component>(),
                     counter_name_, localities_);
 
-                using hpx::util::placeholders::_1;
                 return values.then(
-                    hpx::util::bind(
+                    hpx::util::bind_back(
                         detail::create_bulk_helper<Component>(localities_),
-                        _1, count, std::forward<Ts>(vs)...));
+                        count, std::forward<Ts>(vs)...));
             }
 
             // handle special cases
@@ -296,8 +295,9 @@ namespace hpx { namespace components
                     id, count, std::forward<Ts>(vs)...);
 
             return f.then(hpx::launch::sync,
-                [id](hpx::future<std::vector<hpx::id_type> > && f)
-                    -> std::vector<bulk_locality_result>
+                [HPX_CAPTURE_MOVE(id)](
+                    hpx::future<std::vector<hpx::id_type> > && f
+                ) -> std::vector<bulk_locality_result>
                 {
                     std::vector<bulk_locality_result> result;
                     result.emplace_back(id, f.get());

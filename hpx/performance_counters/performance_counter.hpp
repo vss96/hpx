@@ -1,4 +1,4 @@
-//  Copyright (c) 2007-2013 Hartmut Kaiser
+//  Copyright (c) 2007-2018 Hartmut Kaiser
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,8 +10,9 @@
 #include <hpx/lcos/future.hpp>
 #include <hpx/runtime/components/client_base.hpp>
 #include <hpx/runtime/launch_policy.hpp>
+#include <hpx/util/bind_front.hpp>
 
-#include <hpx/performance_counters/counters.hpp>
+#include <hpx/performance_counters/counters_fwd.hpp>
 #include <hpx/performance_counters/stubs/performance_counter.hpp>
 
 #include <string>
@@ -109,6 +110,10 @@ namespace hpx { namespace performance_counters
         future<void> reset();
         void reset(launch::sync_policy, error_code& ec = throws);
 
+        future<void> reinit(bool reset = true);
+        void reinit(
+            launch::sync_policy, bool reset = true, error_code& ec = throws);
+
 #if defined(HPX_HAVE_ASYNC_FUNCTION_COMPATIBILITY)
         HPX_DEPRECATED(HPX_DEPRECATED_MSG)
         bool start_sync(error_code& ec = throws)
@@ -153,9 +158,8 @@ namespace hpx { namespace performance_counters
         future<T> get_value(bool reset = false)
         {
             return get_counter_value(reset).then(
-                util::bind(
-                    &performance_counter::extract_value<T>,
-                    util::placeholders::_1));
+                util::bind_front(
+                    &performance_counter::extract_value<T>));
         }
         template <typename T>
         T get_value(launch::sync_policy, bool reset = false,
@@ -168,9 +172,8 @@ namespace hpx { namespace performance_counters
         future<T> get_value() const
         {
             return get_counter_value().then(
-                util::bind(
-                    &performance_counter::extract_value<T>,
-                    util::placeholders::_1));
+                util::bind_front(
+                    &performance_counter::extract_value<T>));
         }
         template <typename T>
         T get_value(launch::sync_policy, error_code& ec = throws) const

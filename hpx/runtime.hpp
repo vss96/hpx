@@ -1,4 +1,4 @@
-//  Copyright (c) 2007-2013 Hartmut Kaiser
+//  Copyright (c) 2007-2018 Hartmut Kaiser
 //  Copyright (c)      2011 Bryce Lelbach
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -10,11 +10,14 @@
 #include <hpx/config.hpp>
 #include <hpx/compat/mutex.hpp>
 #include <hpx/lcos/local/spinlock.hpp>
+#include <hpx/performance_counters/counters.hpp>
 #include <hpx/runtime/applier_fwd.hpp>
 #include <hpx/runtime/components/component_type.hpp>
 #include <hpx/runtime/parcelset/locality.hpp>
 #include <hpx/runtime/parcelset_fwd.hpp>
 #include <hpx/runtime/runtime_mode.hpp>
+#include <hpx/runtime/shutdown_function.hpp>
+#include <hpx/runtime/startup_function.hpp>
 #include <hpx/runtime/threads/policies/callback_notifier.hpp>
 #include <hpx/runtime/threads/topology.hpp>
 #include <hpx/runtime_fwd.hpp>
@@ -286,6 +289,7 @@ namespace hpx
         void start_active_counters(error_code& ec = throws);
         void stop_active_counters(error_code& ec = throws);
         void reset_active_counters(error_code& ec = throws);
+        void reinit_active_counters(bool reset = true, error_code& ec = throws);
         void evaluate_active_counters(bool reset = false,
             char const* description = nullptr, error_code& ec = throws);
 

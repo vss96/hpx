@@ -75,6 +75,13 @@ namespace hpx { namespace threads { namespace executors { namespace detail
             this_thread::suspend();
         }
 
+        // Wait for work to finish.
+        while (scheduler_.get_thread_count() >
+            scheduler_.get_background_thread_count())
+        {
+            hpx::this_thread::suspend();
+        }
+
         // Inform the resource manager that this executor is about to be
         // destroyed. This will cause it to invoke remove_processing_unit below
         // for each of the currently allocated virtual cores.
@@ -114,7 +121,8 @@ namespace hpx { namespace threads { namespace executors { namespace detail
         // held.
         util::force_error_on_lock();
 
-        return threads::thread_result_type(threads::terminated, nullptr);
+        return threads::thread_result_type(threads::terminated,
+            threads::invalid_thread_id);
     }
 
     // Schedule the specified function for execution in this executor.
@@ -224,14 +232,15 @@ namespace hpx { namespace threads { namespace executors { namespace detail
         return (scheduler_.get_state(0) < state_stopped) ? 1 : 0;
     }
 
-    // Reset internal (round robin) thread distribution scheme
     template <typename Scheduler>
     void this_thread_executor<Scheduler>::set_scheduler_mode(
         threads::policies::scheduler_mode mode)
     {
+        HPX_ASSERT(!(mode & policies::enable_elasticity));
         scheduler_.set_scheduler_mode(mode);
     }
 
+    // Reset internal (round robin) thread distribution scheme
     template <typename Scheduler>
     void this_thread_executor<Scheduler>::reset_thread_distribution()
     {
@@ -353,8 +362,10 @@ namespace hpx { namespace threads { namespace executors { namespace detail
 
             // the scheduling_loop is allowed to exit only if no more HPX
             // threads exist
-            HPX_ASSERT(!scheduler_.get_thread_count(
-                unknown, thread_priority_default, 0) ||
+            HPX_ASSERT(
+                (scheduler_.get_thread_count(
+                    unknown, thread_priority_default, 0) == 0 &&
+                 scheduler_.get_queue_length(0) == 0) ||
                 state >= state_terminating);
         }
     }

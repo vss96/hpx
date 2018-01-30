@@ -223,7 +223,7 @@ namespace detail
             if (recurse_asynchronously)
             {
                 error_code ec;
-                threads::thread_id_type id = threads::register_thread_nullary(
+                threads::register_thread_nullary(
                     compose_cb_impl(std::move(f1_), std::move(f2_)),
                     "compose_cb",
                     threads::pending, true, threads::thread_priority_boost,
@@ -354,7 +354,7 @@ namespace detail
         /// Set the callback which needs to be invoked when the future becomes
         /// ready. If the future is ready the function will be invoked
         /// immediately.
-        void set_on_completed(completed_callback_type data_sink);
+        void set_on_completed(completed_callback_type data_sink) override;
 
         virtual void wait(error_code& ec = throws);
 
@@ -457,7 +457,7 @@ namespace detail
             return reinterpret_cast<result_type*>(&storage_);
         }
 
-        virtual util::unused_type* get_result_void(error_code& ec = throws)
+        util::unused_type* get_result_void(error_code& ec = throws) override
         {
             return base_type::get_result_void(&storage_, ec);
         }
@@ -508,7 +508,8 @@ namespace detail
                 handle_on_completed(std::move(on_completed));
         }
 
-        void set_exception(std::exception_ptr data, error_code& ec = throws)
+        void set_exception(
+            std::exception_ptr data, error_code& ec = throws) override
         {
             std::unique_lock<mutex_type> l(mtx_);
 
@@ -616,7 +617,7 @@ namespace detail
             on_completed_ = completed_callback_type();
         }
 
-        std::exception_ptr get_exception_ptr() const
+        std::exception_ptr get_exception_ptr() const override
         {
             HPX_ASSERT(state_ == exception);
             return *reinterpret_cast<std::exception_ptr const*>(&storage_);
@@ -650,7 +651,7 @@ namespace detail
 
         template <typename Target>
         future_data(Target && data, init_no_addref no_addref)
-          : future_data_base<Result>(std::move(data), no_addref)
+          : future_data_base<Result>(std::forward<Target>(data), no_addref)
         {}
 
         future_data(std::exception_ptr const& e, init_no_addref no_addref)
@@ -687,7 +688,7 @@ namespace detail
         template <typename Target>
         future_data_allocator(Target && data, init_no_addref no_addref,
                 other_allocator const& alloc)
-          : future_data<Result>(std::move(data), no_addref), alloc_(alloc)
+          : future_data<Result>(std::forward<Target>(data), no_addref), alloc_(alloc)
         {}
         future_data_allocator(std::exception_ptr const& e,
                 init_no_addref no_addref, other_allocator const& alloc)
@@ -772,22 +773,11 @@ namespace detail
 
     public:
         task_base()
-          : started_(false), sched_(nullptr)
+          : started_(false)
         {}
 
         task_base(init_no_addref no_addref)
-          : base_type(no_addref), started_(false), sched_(nullptr)
-        {}
-
-        task_base(threads::executor& sched)
-          : started_(false),
-            sched_(sched ? &sched : nullptr)
-        {}
-
-        task_base(threads::executor& sched, init_no_addref no_addref)
-          : base_type(no_addref),
-            started_(false),
-            sched_(sched ? &sched : nullptr)
+          : base_type(no_addref), started_(false)
         {}
 
         virtual void execute_deferred(error_code& ec = throws)
@@ -880,7 +870,8 @@ namespace detail
         static threads::thread_result_type run_impl(future_base_type this_)
         {
             this_->do_run();
-            return threads::thread_result_type(threads::terminated, nullptr);
+            return threads::thread_result_type(
+                threads::terminated, threads::invalid_thread_id);
         }
 
     public:
@@ -903,7 +894,6 @@ namespace detail
 
     protected:
         bool started_;
-        threads::executor* sched_;
     };
 
     ///////////////////////////////////////////////////////////////////////////
@@ -937,14 +927,6 @@ namespace detail
           : task_base<Result>(no_addref), id_(threads::invalid_thread_id)
         {}
 
-        cancelable_task_base(threads::executor& sched)
-          : task_base<Result>(sched), id_(threads::invalid_thread_id)
-        {}
-
-        cancelable_task_base(threads::executor& sched, init_no_addref no_addref)
-          : task_base<Result>(sched, no_addref), id_(threads::invalid_thread_id)
-        {}
-
     private:
         struct reset_id
         {
@@ -965,7 +947,8 @@ namespace detail
         {
             reset_id r(*this_);
             this_->do_run();
-            return threads::thread_result_type(threads::terminated, nullptr);
+            return threads::thread_result_type(
+                threads::terminated, threads::invalid_thread_id);
         }
 
     public:

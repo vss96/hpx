@@ -8,31 +8,36 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <hpx/config.hpp>
-#include <hpx/throw_exception.hpp>
 #include <hpx/lcos/base_lco_with_value.hpp>
-#include <hpx/performance_counters/counters.hpp>
 #include <hpx/performance_counters/counter_creators.hpp>
+#include <hpx/performance_counters/counters.hpp>
 #include <hpx/performance_counters/manage_counter_type.hpp>
-#include <hpx/runtime/naming/split_gid.hpp>
 #include <hpx/runtime/agas/interface.hpp>
 #include <hpx/runtime/agas/namespace_action_code.hpp>
 #include <hpx/runtime/agas/server/symbol_namespace.hpp>
+#include <hpx/runtime/naming/split_gid.hpp>
+#include <hpx/throw_exception.hpp>
 #include <hpx/util/assert.hpp>
-#include <hpx/util/bind.hpp>
+#include <hpx/util/bind_back.hpp>
+#include <hpx/util/bind_front.hpp>
 #include <hpx/util/format.hpp>
 #include <hpx/util/get_and_reset_value.hpp>
 #include <hpx/util/insert_checked.hpp>
+#include <hpx/util/regex_from_pattern.hpp>
 #include <hpx/util/scoped_timer.hpp>
 #include <hpx/util/unlock_guard.hpp>
 
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include <boost/regex.hpp>
 
 namespace hpx { namespace agas
 {
@@ -56,10 +61,8 @@ void symbol_namespace::register_counter_types(
     error_code& ec
     )
 {
-    using util::placeholders::_1;
-    using util::placeholders::_2;
     performance_counters::create_counter_func creator(
-        util::bind(&performance_counters::agas_raw_counter_creator, _1, _2
+        util::bind_back(&performance_counters::agas_raw_counter_creator
       , agas::server::symbol_namespace_service_name));
 
     for (std::size_t i = 0;
@@ -103,10 +106,8 @@ void symbol_namespace::register_global_counter_types(
     error_code& ec
     )
 {
-    using util::placeholders::_1;
-    using util::placeholders::_2;
     performance_counters::create_counter_func creator(
-        util::bind(&performance_counters::agas_raw_counter_creator, _1, _2
+        util::bind_back(&performance_counters::agas_raw_counter_creator
       , agas::server::symbol_namespace_service_name));
 
     for (std::size_t i = 0;
@@ -367,31 +368,57 @@ naming::gid_type symbol_namespace::unbind(std::string const& key)
 } // }}}
 
 // TODO: catch exceptions
-void symbol_namespace::iterate(
-    symbol_namespace::iterate_names_function_type const& f
-    )
+symbol_namespace::iterate_names_return_type symbol_namespace::iterate(
+    std::string const& pattern)
 { // {{{ iterate implementation
     util::scoped_timer<std::atomic<std::int64_t> > update(
         counter_data_.iterate_names_.time_
     );
     counter_data_.increment_iterate_names_count();
-    std::unique_lock<mutex_type> l(mutex_);
 
-    for (gid_table_type::iterator it = gids_.begin(); it != gids_.end(); ++it)
+    std::map<std::string, naming::gid_type> found;
+
+    if (pattern.find_first_of("*?[]") != std::string::npos)
     {
-        std::string key(it->first);
-        naming::gid_type gid = *(it->second);
+        std::string str_rx(util::regex_from_pattern(pattern, throws));
+        boost::regex rx(str_rx, boost::regex::perl);
 
+        std::unique_lock<mutex_type> l(mutex_);
+        for (gid_table_type::iterator it = gids_.begin(); it != gids_.end();
+             ++it)
         {
-            util::unlock_guard<std::unique_lock<mutex_type> > ul(l);
-            f(key, gid);
-        }
+            if (!boost::regex_match(it->first, rx))
+                continue;
 
-        // re-locate current entry
-        it = gids_.find(key);
+            // hold on to entry while map is unlocked
+            std::shared_ptr<naming::gid_type> current_gid(it->second);
+            util::unlock_guard<std::unique_lock<mutex_type> > ul(l);
+
+            found[it->first] =
+                naming::detail::split_gid_if_needed(*current_gid).get();
+        }
+    }
+    else
+    {
+        std::unique_lock<mutex_type> l(mutex_);
+        for (gid_table_type::iterator it = gids_.begin(); it != gids_.end();
+             ++it)
+        {
+            if (!pattern.empty() && pattern != it->first)
+                continue;
+
+            // hold on to entry while map is unlocked
+            std::shared_ptr<naming::gid_type> current_gid(it->second);
+            util::unlock_guard<std::unique_lock<mutex_type> > ul(l);
+
+            found[it->first] =
+                naming::detail::split_gid_if_needed(*current_gid).get();
+        }
     }
 
     LAGAS_(info) << "symbol_namespace::iterate";
+
+    return found;
 } // }}}
 
 bool symbol_namespace::on_event(
@@ -437,21 +464,11 @@ bool symbol_namespace::on_event(
         on_event_data_map_type::iterator it = on_event_data_.insert(
             on_event_data_map_type::value_type(std::move(name), lco));
 
-        l.unlock();
-
-        if (it == on_event_data_.end())
-        {
-            LAGAS_(info) << hpx::util::format(
-                "symbol_namespace::on_event, name(%1%), response(no_success)",
-                name);
-
-            return false;
-        }
+        // This overload of insert always returns the iterator pointing
+        // to the inserted value. It should never point to end
+        HPX_ASSERT(it != on_event_data_.end());
     }
-    else
-    {
-        l.unlock();
-    }
+    l.unlock();
 
     LAGAS_(info) << "symbol_namespace::on_event";
 
@@ -495,29 +512,33 @@ naming::gid_type symbol_namespace::statistics_counter(std::string const& name)
 
     typedef symbol_namespace::counter_data cd;
 
-    using util::placeholders::_1;
     util::function_nonser<std::int64_t(bool)> get_data_func;
     if (target == detail::counter_target_count)
     {
         switch (code) {
         case symbol_ns_bind:
-            get_data_func = util::bind(&cd::get_bind_count, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_bind_count,
+                &counter_data_);
             break;
         case symbol_ns_resolve:
-            get_data_func = util::bind(&cd::get_resolve_count, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_resolve_count,
+                &counter_data_);
             break;
         case symbol_ns_unbind:
-            get_data_func = util::bind(&cd::get_unbind_count, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_unbind_count,
+                &counter_data_);
             break;
         case symbol_ns_iterate_names:
-            get_data_func = util::bind(&cd::get_iterate_names_count,
-                &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_iterate_names_count,
+                &counter_data_);
             break;
         case symbol_ns_on_event:
-            get_data_func = util::bind(&cd::get_on_event_count, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_on_event_count,
+                &counter_data_);
             break;
         case symbol_ns_statistics_counter:
-            get_data_func = util::bind(&cd::get_overall_count, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_overall_count,
+                &counter_data_);
             break;
         default:
             HPX_THROW_EXCEPTION(bad_parameter
@@ -529,23 +550,28 @@ naming::gid_type symbol_namespace::statistics_counter(std::string const& name)
         HPX_ASSERT(detail::counter_target_time == target);
         switch (code) {
         case symbol_ns_bind:
-            get_data_func = util::bind(&cd::get_bind_time, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_bind_time,
+                &counter_data_);
             break;
         case symbol_ns_resolve:
-            get_data_func = util::bind(&cd::get_resolve_time, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_resolve_time,
+                &counter_data_);
             break;
         case symbol_ns_unbind:
-            get_data_func = util::bind(&cd::get_unbind_time, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_unbind_time,
+                &counter_data_);
             break;
         case symbol_ns_iterate_names:
-            get_data_func = util::bind(&cd::get_iterate_names_time,
-                &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_iterate_names_time,
+                &counter_data_);
             break;
         case symbol_ns_on_event:
-            get_data_func = util::bind(&cd::get_on_event_time, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_on_event_time,
+                &counter_data_);
             break;
         case symbol_ns_statistics_counter:
-            get_data_func = util::bind(&cd::get_overall_time, &counter_data_, _1);
+            get_data_func = util::bind_front(&cd::get_overall_time,
+                &counter_data_);
             break;
         default:
             HPX_THROW_EXCEPTION(bad_parameter

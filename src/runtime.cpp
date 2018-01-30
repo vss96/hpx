@@ -1,4 +1,4 @@
-//  Copyright (c) 2007-2017 Hartmut Kaiser
+//  Copyright (c) 2007-2018 Hartmut Kaiser
 //  Copyright (c)      2011 Bryce Lelbach
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -216,11 +216,13 @@ namespace hpx
             "state_starting",     // 4
             "state_running",      // 5
             "state_suspended",    // 6
-            "state_pre_shutdown", // 7
-            "state_shutdown",     // 8
-            "state_stopping",     // 9
-            "state_terminating",  // 10
-            "state_stopped"       // 11
+            "state_pre_sleep",    // 7
+            "state_sleeping",     // 8
+            "state_pre_shutdown", // 9
+            "state_shutdown",     // 10
+            "state_stopping",     // 11
+            "state_terminating",  // 12
+            "state_stopped"       // 13
         };
     }
 
@@ -328,7 +330,7 @@ namespace hpx
         return *thread_support_;
     }
 
-///////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
     void runtime::register_query_counters(
         std::shared_ptr<util::query_counters> const& active_counters)
     {
@@ -351,6 +353,12 @@ namespace hpx
     {
         if (active_counters_.get())
             active_counters_->reset_counters(ec);
+    }
+
+    void runtime::reinit_active_counters(bool reset, error_code& ec)
+    {
+        if (active_counters_.get())
+            active_counters_->reinit_counters(reset, ec);
     }
 
     void runtime::evaluate_active_counters(bool reset,
@@ -1281,6 +1289,18 @@ namespace hpx
         }
         else {
             HPX_THROWS_IF(ec, invalid_status, "reset_active_counters",
+                "the runtime system is not available at this time");
+        }
+    }
+
+    void reinit_active_counters(bool reset, error_code& ec)
+    {
+        runtime* rt = get_runtime_ptr();
+        if (nullptr != rt) {
+            rt->reinit_active_counters(reset, ec);
+        }
+        else {
+            HPX_THROWS_IF(ec, invalid_status, "reinit_active_counters",
                 "the runtime system is not available at this time");
         }
     }

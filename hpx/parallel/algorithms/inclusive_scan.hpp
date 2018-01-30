@@ -119,7 +119,7 @@ namespace hpx { namespace parallel { inline namespace v1
                 using hpx::util::make_zip_iterator;
 
                 auto f3 =
-                    [op, conv, policy](
+                    [op, policy](
                         zip_iterator part_begin, std::size_t part_size,
                         hpx::shared_future<T> curr, hpx::shared_future<T> next
                     )
@@ -144,20 +144,20 @@ namespace hpx { namespace parallel { inline namespace v1
                     std::forward<ExPolicy>(policy),
                     make_zip_iterator(first, dest), count, init,
                     // step 1 performs first part of scan algorithm
-                    [op, conv, last](zip_iterator part_begin,
-                        std::size_t part_size) -> T
+                    [op, last, HPX_CAPTURE_FORWARD(conv)](
+                        zip_iterator part_begin, std::size_t part_size) -> T
                     {
                         T part_init = hpx::util::invoke(conv, get<0>(*part_begin));
                         get<1>(*part_begin++) = part_init;
+
                         auto iters = part_begin.get_iterator_tuple();
                         if(get<0>(iters) != last)
-                            return sequential_inclusive_scan_n(
-                                get<0>(iters),
-                                part_size-1,
-                                get<1>(iters),
-                                part_init, op, conv);
-                        else
-                            return part_init;
+                        {
+                            return sequential_inclusive_scan_n(get<0>(iters),
+                                part_size - 1, get<1>(iters), part_init, op,
+                                conv);
+                        }
+                        return part_init;
                     },
                     // step 2 propagates the partition results from left
                     // to right
@@ -289,7 +289,7 @@ namespace hpx { namespace parallel { inline namespace v1
     template <typename ExPolicy, typename FwdIter1, typename FwdIter2, typename Op,
         typename T,
     HPX_CONCEPT_REQUIRES_(
-        is_execution_policy<ExPolicy>::value &&
+        execution::is_execution_policy<ExPolicy>::value &&
         hpx::traits::is_iterator<FwdIter1>::value &&
         hpx::traits::is_iterator<FwdIter2>::value &&
         hpx::traits::is_invocable<Op,
@@ -330,7 +330,7 @@ namespace hpx { namespace parallel { inline namespace v1
     template <typename ExPolicy, typename FwdIter1, typename FwdIter2, typename T,
         typename Op,
     HPX_CONCEPT_REQUIRES_(
-        is_execution_policy<ExPolicy>::value &&
+        execution::is_execution_policy<ExPolicy>::value &&
         hpx::traits::is_iterator<FwdIter1>::value &&
         hpx::traits::is_iterator<FwdIter2>::value &&
         hpx::traits::is_invocable<Op,
@@ -429,7 +429,7 @@ namespace hpx { namespace parallel { inline namespace v1
     ///
     template <typename ExPolicy, typename FwdIter1, typename FwdIter2, typename T,
     HPX_CONCEPT_REQUIRES_(
-        is_execution_policy<ExPolicy>::value &&
+        execution::is_execution_policy<ExPolicy>::value &&
         hpx::traits::is_iterator<FwdIter1>::value &&
         hpx::traits::is_iterator<FwdIter2>::value &&
        !hpx::traits::is_invocable<T,
@@ -542,7 +542,7 @@ namespace hpx { namespace parallel { inline namespace v1
     ///
     template <typename ExPolicy, typename FwdIter1, typename FwdIter2, typename Op,
     HPX_CONCEPT_REQUIRES_(
-        is_execution_policy<ExPolicy>::value &&
+        execution::is_execution_policy<ExPolicy>::value &&
         hpx::traits::is_iterator<FwdIter1>::value &&
         hpx::traits::is_iterator<FwdIter2>::value &&
         hpx::traits::is_invocable<Op,

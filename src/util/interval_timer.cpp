@@ -9,9 +9,10 @@
 #include <hpx/runtime/shutdown_function.hpp>
 #include <hpx/runtime/threads/thread_helpers.hpp>
 #include <hpx/util/assert.hpp>
+#include <hpx/util/bind_front.hpp>
+#include <hpx/util/deferred_call.hpp>
 #include <hpx/util/interval_timer.hpp>
 #include <hpx/util/unlock_guard.hpp>
-#include <hpx/util/bind.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -60,13 +61,13 @@ namespace hpx { namespace util { namespace detail
                 if (pre_shutdown_)
                 {
                     register_pre_shutdown_function(
-                        util::bind(&interval_timer::terminate,
+                        util::deferred_call(&interval_timer::terminate,
                             this->shared_from_this()));
                 }
                 else
                 {
                     register_shutdown_function(
-                        util::bind(&interval_timer::terminate,
+                        util::deferred_call(&interval_timer::terminate,
                             this->shared_from_this()));
                 }
             }
@@ -126,7 +127,7 @@ namespace hpx { namespace util { namespace detail
                 error_code ec(lightweight);       // avoid throwing on error
                 threads::set_thread_state(id_, threads::pending,
                     threads::wait_abort, threads::thread_priority_boost, ec);
-                id_ = nullptr;
+                id_.reset();
             }
             return true;
         }
@@ -186,16 +187,18 @@ namespace hpx { namespace util { namespace detail
                 statex == threads::wait_abort || 0 == microsecs_)
             {
                 // object has been finalized, exit
-                return threads::thread_result_type(threads::terminated, nullptr);
+                return threads::thread_result_type(threads::terminated,
+                    threads::invalid_thread_id);
             }
 
             if (id_ != nullptr && id_ != threads::get_self_id())
             {
                 // obsolete timer thread
-                return threads::thread_result_type(threads::terminated, nullptr);
+                return threads::thread_result_type(threads::terminated,
+                    threads::invalid_thread_id);
             }
 
-            id_ = nullptr;
+            id_.reset();
             is_started_ = false;
 
             bool result = false;
@@ -221,7 +224,8 @@ namespace hpx { namespace util { namespace detail
         }
 
         // do not re-schedule this thread
-        return threads::thread_result_type(threads::terminated, nullptr);
+        return threads::thread_result_type(threads::terminated,
+            threads::invalid_thread_id);
     }
 
     // schedule a high priority task after a given time interval
@@ -242,8 +246,8 @@ namespace hpx { namespace util { namespace detail
             // at shutdown.
             //util::unlock_guard<std::unique_lock<mutex_type> > ul(l);
             id = hpx::applier::register_thread_plain(
-                util::bind(&interval_timer::evaluate,
-                    this->shared_from_this(), util::placeholders::_1),
+                util::bind_front(&interval_timer::evaluate,
+                    this->shared_from_this()),
                 description_.c_str(), threads::suspended, true,
                 threads::thread_priority_boost, std::size_t(-1),
                 threads::thread_stacksize_default, ec);

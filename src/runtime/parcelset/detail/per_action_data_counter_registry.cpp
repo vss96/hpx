@@ -10,7 +10,9 @@
 #include <hpx/runtime/parcelset/detail/per_action_data_counter_registry.hpp>
 #include <hpx/performance_counters/counter_creators.hpp>
 #include <hpx/performance_counters/registry.hpp>
+#include <hpx/util/bind_front.hpp>
 #include <hpx/util/format.hpp>
+#include <hpx/util/regex_from_pattern.hpp>
 
 #include <cstdint>
 #include <string>
@@ -58,7 +60,7 @@ namespace hpx { namespace parcelset { namespace detail
                 "unknown action type");
             return nullptr;
         }
-        return util::bind(f, name, util::placeholders::_1);
+        return util::bind_front(f, name);
     }
 
     bool per_action_data_counter_registry::counter_discoverer(
@@ -93,9 +95,7 @@ namespace hpx { namespace parcelset { namespace detail
 
         if (p.parameters_.find_first_of("*?[]") != std::string::npos)
         {
-            std::string str_rx(
-                performance_counters::detail::regex_from_pattern(
-                    p.parameters_, ec));
+            std::string str_rx(util::regex_from_pattern(p.parameters_, ec));
             if (ec) return false;
 
             bool found_one = false;

@@ -93,7 +93,16 @@ namespace hpx { namespace threads { namespace executors { namespace detail
         // if we're still starting up, give this executor a chance of executing
         // its tasks
         while (!scheduler_.has_reached_state(state_running))
+        {
             this_thread::suspend();
+        }
+
+        // Wait for work to finish.
+        while (scheduler_.get_thread_count() >
+            scheduler_.get_background_thread_count())
+        {
+            hpx::this_thread::suspend();
+        }
 
         // Inform the resource manager that this executor is about to be
         // destroyed. This will cause it to invoke remove_processing_unit below
@@ -140,7 +149,8 @@ namespace hpx { namespace threads { namespace executors { namespace detail
         // held.
         util::force_error_on_lock();
 
-        return threads::thread_result_type(threads::terminated, nullptr);
+        return threads::thread_result_type(threads::terminated,
+            threads::invalid_thread_id);
     }
 
     // Schedule the specified function for execution in this executor.
@@ -352,8 +362,10 @@ namespace hpx { namespace threads { namespace executors { namespace detail
 
             // the scheduling_loop is allowed to exit only if no more HPX
             // threads exist
-            HPX_ASSERT(!scheduler_.get_thread_count(
-                unknown, thread_priority_default, virt_core) ||
+            HPX_ASSERT(
+                (scheduler_.get_thread_count(
+                    suspended, thread_priority_default, virt_core) == 0 &&
+                 scheduler_.get_queue_length(virt_core) == 0) ||
                 state >= state_terminating);
         }
     }
