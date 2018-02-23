@@ -24,7 +24,7 @@
 #include <hpx/util/deferred_call.hpp>
 #include <hpx/util/thread_description.hpp>
 
-#include <hpx/parallel/executors/execution.hpp>
+#include <hpx/parallel/executors/execution_fwd.hpp>
 #include <hpx/parallel/executors/post_policy_dispatch.hpp>
 
 #include <boost/intrusive_ptr.hpp>

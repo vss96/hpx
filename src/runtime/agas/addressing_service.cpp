@@ -2852,6 +2852,19 @@ namespace hpx
         return agas::register_name(std::move(name), id);
     }
 
+    hpx::future<bool> register_with_basename(std::string base_name,
+        hpx::future<hpx::id_type> f, std::size_t sequence_nr)
+    {
+        return f.then(
+            [sequence_nr, HPX_CAPTURE_MOVE(base_name)](
+                hpx::future<hpx::id_type> && f
+            ) mutable -> hpx::future<bool>
+            {
+                return register_with_basename(
+                    std::move(base_name), f.get(), sequence_nr);
+            });
+    }
+
     hpx::future<hpx::id_type> unregister_with_basename(
         std::string basename, std::size_t sequence_nr)
     {
